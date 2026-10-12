@@ -1,0 +1,9 @@
+{
+  "name": "Processor C (proposed)",
+  "description": "Phase-2 proposed processor: 6-qubit open path hosting the 4-site Ising chain with zero SWAP overhead and one spare qubit for ancilla-based error mitigation.",
+  "num_qubits": 6,
+  "coupling_edges": [[0,1],[1,2],[2,3],[3,4],[4,5]],
+  "basis_gates": ["x", "sx", "rz", "cx"],
+  "two_qubit_gate_error": 0.005,
+  "one_qubit_gate_error": 0.001
+}

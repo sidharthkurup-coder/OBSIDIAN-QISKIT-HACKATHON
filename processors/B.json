@@ -1,0 +1,9 @@
+{
+  "name": "Processor B",
+  "description": "Phase-1 fixed 9-qubit heavy-hex-inspired benchmark. Contains a 6-cycle (0-1-2-3-4-5-6) that hosts a 4-site chain with zero SWAPs.",
+  "num_qubits": 9,
+  "coupling_edges": [[0,1],[1,2],[1,6],[2,3],[2,6],[2,5],[3,4],[4,5],[5,6],[6,7],[6,8],[8,0]],
+  "basis_gates": ["x", "sx", "rz", "cx"],
+  "two_qubit_gate_error": 0.005,
+  "one_qubit_gate_error": 0.001
+}
