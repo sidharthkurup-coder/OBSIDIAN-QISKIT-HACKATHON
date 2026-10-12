@@ -87,32 +87,31 @@ cells.append(md(
 "SWAP (3 extra CNOTs) and ~3× depth. B's clean cycle maps the chain with zero SWAPs. Identical "
 "algorithm and physics on both — the difference is pure architecture."))
 
-cells.append(md("## 5 · Fair noise study (0.5% depolarizing on CX, 0.1% on 1Q, 20k shots)"))
+cells.append(md("## 5 · Noisy, shot-based VQE energy on each processor's routed circuit\n\n"
+"Same noise model (0.5% depolarizing on CX, 0.1% on 1Q), same 8192-shot budget, 3 seeds. "
+"`noisy_energy()` reads the full TFIM Hamiltonian from measurement counts of the **routed** "
+"circuit — this is where routing overhead turns into accuracy loss."))
 cells.append(code(
+"from qiskit_aer.noise import NoiseModel, depolarizing_error\n"
 "noise_rows = []\n"
 "H = tfim_hamiltonian(J=1.0, g=1.0)\n"
+"E0, _ = exact_ground(H)\n"
 "_, th, _ = E.optimise(H)\n"
 "nm = NoiseModel()\n"
 "nm.add_all_qubit_quantum_error(depolarizing_error(0.005, 2), ['cx'])\n"
 "nm.add_all_qubit_quantum_error(depolarizing_error(0.001, 1), ['sx', 'rz'])\n"
-"SHOTS = 20000\n"
+"SHOTS, SEEDS = 8192, (1, 2, 3)\n"
 "for pname in ('A', 'B', 'C'):\n"
 "    p = procs[pname]\n"
-"    qc = ansatz(th); qc.measure_all()\n"
-"    counts = AerSimulator(noise_model=nm, shots=SHOTS).run(qc, shots=SHOTS).result().get_counts()\n"
-"    tot = 0\n"
-"    for bs, c in counts.items():\n"
-"        b = bs.replace(' ', '')[::-1]; par = 1\n"
-"        for i in range(N): par *= (1 if b[i] == '0' else -1)\n"
-"        tot += c * par\n"
-"    zz_noisy = tot / sum(counts.values())\n"
-"    zz_ideal = E.expectation(th, E.ZZ_OBS)\n"
+"    ests = [E.noisy_energy(th, H, p, nm, shots=SHOTS, seed=s) for s in SEEDS]\n"
+"    mean, std = float(np.mean(ests)), float(np.std(ests))\n"
 "    m = E.metrics(th, p)\n"
-"    noise_rows.append({'processor': pname, 'cx': m['cx'], 'depth': m['depth'],\n"
-"                       'ZZ_ideal': zz_ideal, 'ZZ_noisy': float(zz_noisy),\n"
-"                       'abs_error': abs(zz_ideal - float(zz_noisy))})\n"
-"    print(f'Proc {pname}: ideal={zz_ideal:+.4f} noisy={zz_noisy:+.4f} "
-"err={abs(zz_ideal-zz_noisy):.4f}  routedCX={m[\"cx\"]} depth={m[\"depth\"]}')"))
+"    noise_rows.append({'processor': pname, 'logical_2q': m['logical_2q'], 'cx': m['cx'],\n"
+"                       'depth': m['depth'], 'swaps': m['swaps'],\n"
+"                       'E_noisy_mean': mean, 'E_noisy_std': std,\n"
+"                       'abs_err_vs_exact': abs(mean - E0), 'E_exact': E0})\n"
+"    print(f\"Proc {pname}: noisy E = {mean:+.4f} ± {std:.4f} |err|={abs(mean-E0):.4f} \"\n"
+"          f\"(logical2q={m['logical_2q']} CX={m['cx']} depth={m['depth']} SWAP={m['swaps']})\")"))
 
 cells.append(md("## 6 · Figures"))
 cells.append(code(
@@ -127,10 +126,11 @@ cells.append(code(
 "    print('display skipped:', e)"))
 
 cells.append(md(
-"## 7 · Processor C — the co-design payoff\n\n"
-"Processor C is a 6-qubit open path matching B's best cost (6 CX / depth 13 / 0 SWAP) with "
-"**half the qubits**, proving B's extra connectivity is unnecessary for this workload and "
-"leaving a spare qubit for ancilla error mitigation in Phase 2."))
+"## 7 · Processor C — simulated proposed topology\n\n"
+"A **simulated, proposed** 6-qubit open path: 4 qubits run the VQE, 2 are **reserved "
+"(currently unused)**. It matches B's cost (6 CX / depth 13 / 0 SWAP) with fewer qubits. "
+"The reserved qubits are a design placeholder for future ancilla-based mitigation — **no "
+"mitigation benefit is claimed or measured** here."))
 cells.append(code(
 "C = [r for r in results_rows if r['processor']=='C' and r['g']==1.0][0]\n"
 "A = [r for r in results_rows if r['processor']=='A' and r['g']==1.0][0]\n"

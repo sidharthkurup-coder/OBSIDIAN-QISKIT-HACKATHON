@@ -42,15 +42,30 @@ def processors():
     return out
 
 def metrics(theta, proc):
-    """Transpile the ansatz onto the processor's coupling map; count cost."""
-    tr = transpile(ansatz(theta), coupling_map=CouplingMap(proc["edges"]),
+    """Transpile the ansatz onto the processor's coupling map; count cost.
+
+    Reports each quantity SEPARATELY (never inferred from another):
+      logical_2q : two-qubit gate count of the un-routed ansatz (= (N-1)*REPS)
+      routed_cx  : CX count after routing onto this coupling map
+      depth      : routed circuit depth
+      measured_swaps: count of explicit SWAP operations in the routed circuit
+    A fixed seed_transpiler makes the comparison reproducible across A/B/C.
+    """
+    base = ansatz(theta)
+    logical_2q = int(base.count_ops().get("cx", 0))
+    tr = transpile(base, coupling_map=CouplingMap(proc["edges"]),
                    initial_layout=list(range(N)),
-                   basis_gates=["rz", "sx", "x", "cx"], optimization_level=3)
-    cx = int(tr.count_ops().get("cx", 0))
-    base_cx = (N - 1) * REPS          # logical CX if fully-connected
-    swaps = max(0, (cx - base_cx) // 2)  # each routed SWAP costs 3 CX -> +2 vs logical
-    return {"cx": cx, "depth": int(tr.depth()), "swaps": int(swaps),
-            "single": int(tr.count_ops().get("sx", 0) + tr.count_ops().get("x", 0))}
+                   basis_gates=["rz", "sx", "x", "cx"],
+                   optimization_level=3, seed_transpiler=42)
+    # measure EXPLICIT swap ops (pre-decomposition) by routing without basis change
+    tr_swaps = transpile(base, coupling_map=CouplingMap(proc["edges"]),
+                         initial_layout=list(range(N)),
+                         basis_gates=None, optimization_level=3, seed_transpiler=42)
+    measured_swaps = int(tr_swaps.count_ops().get("swap", 0))
+    return {"logical_2q": logical_2q, "cx": int(tr.count_ops().get("cx", 0)),
+            "depth": int(tr.depth()), "swaps": measured_swaps,
+            "single": int(tr.count_ops().get("sx", 0) + tr.count_ops().get("x", 0)),
+            "circuit": tr}
 
 def optimise(H):
     E0 = exact_ground(H)[0]
@@ -76,12 +91,114 @@ def expectation(theta, obs, noise=None, shots=4096):
     for bs, c in counts.items():
         b = bs.replace(" ", "")[::-1]
         zprod = 1
-        # only qubit parity matters for a pure-Z string observable
         for idx, op in enumerate(obs.paulis.to_labels()[0]):
             if op == "Z":
                 zprod *= (1 if b[idx] == "0" else -1)
         total += c * zprod
     return total / sum(counts.values())
+
+
+def _measure_group(theta, proc, basis, noise, shots, seed):
+    """Build the measurement circuit for `basis` and return counts keyed by LOGICAL qubit.
+
+    We deliberately do NOT read physical (post-routing) counts: instead we transpile with
+    only the InitialLayout so the circuit stays on logical qubits 0..N-1, then run it on a
+    simulator with that device's coupling map. Counts remain in logical order, so the
+    per-qubit <X_i> estimates are correct regardless of where the router placed each qubit.
+    """
+    qc = ansatz(theta)
+    if basis == "X":
+        qc = qc.copy()
+        qc.h(range(N))
+    qc.measure_all()
+    tr = transpile(qc, coupling_map=CouplingMap(proc["edges"]),
+                   initial_layout=list(range(N)),
+                   basis_gates=["rz", "sx", "x", "cx"],
+                   optimization_level=0, seed_transpiler=seed)   # routing NOT applied (lvl 0)
+    sim = AerSimulator(noise_model=noise, shots=shots, seed_simulator=seed)
+    return sim.run(tr, shots=shots).result().get_counts()
+
+
+def _z_string_energy(counts):
+    """<ZZ..Z> parity over logical qubits from Z-basis counts."""
+    tot = sum(counts.values())
+    s = 0
+    for bs, c in counts.items():
+        b = bs.replace(" ", "")[::-1]
+        par = 1
+        for i in range(len(b)):
+            par *= (1 if b[i] == "0" else -1)
+        s += c * par
+    return s / tot
+
+
+def _x_sum(counts, n):
+    """(1/n) * sum_i <X_i>: parity of all logical qubits except i, from all-X counts."""
+    tot = sum(counts.values())
+    s = 0
+    for bs, c in counts.items():
+        b = bs.replace(" ", "")[::-1]
+        for i in range(n):
+            par = 1
+            for j in range(n):
+                if j != i:
+                    par *= (1 if b[j] == "0" else -1)
+            s += c * par
+    return s / (tot * n)
+
+
+def _parity_expect(counts, qubits, all_q):
+    """<Z_{q1} Z_{q2} ...> from counts: parity over ONLY the listed qubit positions."""
+    tot = sum(counts.values())
+    s = 0
+    for bs, c in counts.items():
+        b = bs.replace(" ", "")[::-1]
+        par = 1
+        for q in qubits:
+            par *= (1 if b[q] == "0" else -1)
+        s += c * par
+    return s / tot
+
+
+def _x_expect(counts, i, all_q):
+    """<X_i> from all-X-basis counts: parity over all OTHER qubits."""
+    tot = sum(counts.values())
+    s = 0
+    for bs, c in counts.items():
+        b = bs.replace(" ", "")[::-1]
+        par = 1
+        for j in range(all_q):
+            if j != i:
+                par *= (1 if b[j] == "0" else -1)
+        s += c * par
+    return s / tot
+
+
+def noisy_energy(theta, H, proc, noise, shots=8192, seed=0):
+    """Estimate <H> from NOISY shot counts of the circuit mapped to `proc`.
+
+    Handles the full TFIM term structure:
+      - ZZ terms (2 Z's)  -> read from Z-basis counts, parity of their two qubit indices
+      - X terms (1 X)      -> read from all-X-basis counts, parity-minus-self
+    Returns real energy including shot noise + hardware noise. (P1 fix.)
+    """
+    labels = H.paulis.to_labels()
+    coeffs = np.real(H.coeffs)
+    z_counts = _measure_group(theta, proc, "Z", noise, shots, seed)
+    x_counts = _measure_group(theta, proc, "X", noise, shots, seed)
+    energy = 0.0
+    for lab, c in zip(labels, coeffs):
+        z_pos = [i for i, ch in enumerate(lab) if ch == "Z"]
+        x_pos = [i for i, ch in enumerate(lab) if ch == "X"]
+        if lab.count("Z") == 2 and not x_pos:          # ZZ term
+            energy += c * _parity_expect(z_counts, z_pos, N)
+        elif lab.count("X") == 1 and not z_pos:        # single-X term
+            energy += c * _x_expect(x_counts, x_pos[0], N)
+        elif set(lab) == {"I"}:                        # identity
+            energy += c
+        else:
+            raise ValueError(f"unsupported term {lab}")
+    return float(energy)
 
 def main():
     t0 = time.time()
@@ -104,45 +221,38 @@ def main():
             results_rows.append(
                 {"g": g, "processor": pname, "E_vqe": Evqe, "E_exact": E0,
                  "abs_err": abs(Evqe - E0), "fidelity": fid, "magnetization": mag,
-                 "cx": m["cx"], "depth": m["depth"], "swaps": m["swaps"],
-                 "single": m["single"]})
+                 "logical_2q": m["logical_2q"], "cx": m["cx"],
+                 "depth": m["depth"], "swaps": m["swaps"], "single": m["single"]})
             print(f"  Proc {pname}: E={Evqe:.6f} err={abs(Evqe-E0):.2e} "
-                  f"fid={fid:.4f} m={mag:+.4f} CX={m['cx']} depth={m['depth']} SWAP={m['swaps']}")
+                  f"fid={fid:.4f} | logical2q={m['logical_2q']} CX={m['cx']} "
+                  f"depth={m['depth']} SWAP={m['swaps']}")
 
+    # ---- P1: NOISY, SHOT-BASED VQE ENERGY on each processor's routed circuit ----
+    # Same noise model + same shot budget for all three; repeat over seeds for variability.
+    # Reports noisy energy error vs EXACT ground state, and how much routing costs A.
     print("\n" + "=" * 78)
-    print("NOISE STUDY (g=1.0): fair comparison - each proc runs its own native")
-    print("chain circuit (6 CX, no routing) with 0.5% depolarizing on CX, 0.1% on 1Q")
+    print("NOISY VQE ENERGY (g=1.0): routed circuit per processor, 0.5% CX / 0.1% 1Q depol.")
     print("=" * 78)
     H = tfim_hamiltonian(J=1.0, g=1.0)
-    _, th, _ = optimise(H)
-    SHOTS = 20000
+    E0, _ = exact_ground(H)
+    _, th, _ = optimise(H)                 # fixed optimized parameters for all processors
+    nm = NoiseModel()
+    nm.add_all_qubit_quantum_error(depolarizing_error(0.005, 2), ["cx"])
+    nm.add_all_qubit_quantum_error(depolarizing_error(0.001, 1), ["sx", "rz"])
+    SHOTS, SEEDS = 8192, (1, 2, 3)
     for pname in ("A", "B", "C"):
         p = procs[pname]
-        # Native (fully-mapped) circuit = logical ansatz; identical CX for all procs.
-        # This isolates that the *accuracy* is architecture-independent while the
-        # *cost* (CX/depth) is what differs -> the co-design thesis.
-        nm = NoiseModel()
-        nm.add_all_qubit_quantum_error(depolarizing_error(0.005, 2), ["cx"])
-        nm.add_all_qubit_quantum_error(depolarizing_error(0.001, 1), ["sx", "rz"])
-        qc = ansatz(th)
-        qc.measure_all()
-        sim = AerSimulator(noise_model=nm, shots=SHOTS)
-        counts = sim.run(qc, shots=SHOTS).result().get_counts()
-        tot = 0
-        for bs, c in counts.items():
-            b = bs.replace(" ", "")[::-1]
-            par = 1
-            for i in range(N):
-                par *= (1 if b[i] == "0" else -1)
-            tot += c * par
-        zz_noisy = tot / sum(counts.values())
-        zz_ideal = expectation(th, ZZ_OBS)
-        m = metrics(th, p)   # cost still differs by routing on the real chip
-        noise_rows.append({"processor": pname, "cx": m["cx"], "depth": m["depth"],
-                           "ZZ_ideal": zz_ideal, "ZZ_noisy": float(zz_noisy),
-                           "abs_error": abs(zz_ideal - float(zz_noisy))})
-        print(f"  Proc {pname}: <ZZZZ> ideal={zz_ideal:+.4f} noisy={zz_noisy:+.4f} "
-              f"|err|={abs(zz_ideal-zz_noisy):.4f}  routedCX={m['cx']} routedDepth={m['depth']}")
+        ests = [noisy_energy(th, H, p, nm, shots=SHOTS, seed=s) for s in SEEDS]
+        mean = float(np.mean(ests)); std = float(np.std(ests))
+        m = metrics(th, p)
+        noise_rows.append(
+            {"processor": pname, "logical_2q": m["logical_2q"], "cx": m["cx"],
+             "depth": m["depth"], "swaps": m["swaps"],
+             "E_noisy_mean": mean, "E_noisy_std": std,
+             "abs_err_vs_exact": abs(mean - E0), "E_exact": E0})
+        print(f"  Proc {pname}: noisy E = {mean:+.4f} ± {std:.4f} Ha   "
+              f"|E_noisy - E_exact| = {abs(mean-E0):.4f}   "
+              f"(logical2q={m['logical_2q']} CX={m['cx']} depth={m['depth']} SWAP={m['swaps']})")
 
     save(results_rows, noise_rows, procs)
     print(f"\n[done in {time.time()-t0:.1f}s]  ->  results/")
@@ -197,43 +307,70 @@ def figures(results_rows, noise_rows, procs):
     ax.set_title("Circuit cost at g=1.0 (2-layer, 4 qubits)"); ax.legend(); ax.grid(alpha=.3, axis="y")
     plt.tight_layout(); plt.savefig(os.path.join(RES, "architecture_cost.png"), dpi=130); plt.close()
 
+    # noisy VQE energy error per processor (P1) with variability bars
     fig, ax = plt.subplots(figsize=(7, 5))
     xs = np.arange(len(noise_rows))
-    ax.bar(xs, [r["abs_error"] for r in noise_rows], .5, color="crimson")
+    ax.bar(xs, [r["abs_err_vs_exact"] for r in noise_rows], .5, color="crimson",
+           yerr=[r["E_noisy_std"] for r in noise_rows], capsize=6)
     ax.set_xticks(xs); ax.set_xticklabels([f"Proc {r['processor']}" for r in noise_rows])
-    ax.set_ylabel("|<ZZZZ>_ideal - <ZZZZ>_noisy|")
-    ax.set_title("Noise-induced observable error (g=1.0)"); ax.grid(alpha=.3, axis="y")
+    ax.set_ylabel("|E_noisy - E_exact| (Ha)   [± 1σ shot/seed variability]")
+    ax.set_title("Noisy VQE energy error vs exact ground state (g=1.0)")
+    ax.grid(alpha=.3, axis="y")
     plt.tight_layout(); plt.savefig(os.path.join(RES, "noise_impact.png"), dpi=130); plt.close()
 
 def write_report(results_rows, noise_rows):
     def pick(proc):
         return [r for r in results_rows if r["processor"] == proc and r["g"] == 1.0][0]
     A, B, C = pick("A"), pick("B"), pick("C")
+    n = {r["processor"]: r for r in noise_rows}
     L = ["# PS-S1 Results (all numbers produced by src/experiment.py)", "",
-         "## VQE accuracy per processor", "",
-         "| g | Proc | E_VQE | E_exact | abs err | fidelity | mag | CX | depth | SWAP |",
-         "|---|---|---|---|---|---|---|---|---|---|"]
+         "## 1 · Circuit cost per processor (g = 1.0, identical 2-layer ansatz)", "",
+         "Reported separately — logical gate count, routed CX, depth, and **measured** SWAP ops.",
+         "No quantity is inferred from another. `seed_transpiler=42` fixed for reproducibility.", "",
+         "| Proc | logical 2Q | routed CX | depth | measured SWAP |",
+         "|---|---|---|---|---|"]
+    for r in (A, B, C):
+        L.append(f"| {r['processor']} | {r['logical_2q']} | {r['cx']} | {r['depth']} | {r['swaps']} |")
+    L += ["",
+          f"All three start from the same **{A['logical_2q']}** logical two-qubit gates. Routing onto "
+          f"Processor A's chorded map raises CX to **{A['cx']}** (depth {A['depth']}, {A['swaps']} measured SWAP); "
+          f"B and C need no SWAPs (CX {B['cx']}, depth {B['depth']}).", "",
+          "## 2 · Ideal (noiseless) VQE accuracy — identical across processors by construction", "",
+          "| g | Proc | E_VQE | E_exact | abs err | fidelity |",
+          "|---|---|---|---|---|---|"]
     for r in results_rows:
         L.append(f"| {r['g']} | {r['processor']} | {r['E_vqe']:.6f} | {r['E_exact']:.6f} | "
-                 f"{r['abs_err']:.2e} | {r['fidelity']:.4f} | {r['magnetization']:+.4f} | "
-                 f"{r['cx']} | {r['depth']} | {r['swaps']} |")
-    L += ["", "## Noise study (g=1.0, fair native-circuit comparison, 20k shots)", "",
-          "| Proc | routed CX | routed depth | <ZZZZ> ideal | <ZZZZ> noisy | abs err |",
-          "|---|---|---|---|---|---|"]
-    for r in noise_rows:
-        L.append(f"| {r['processor']} | {r['cx']} | {r['depth']} | {r['ZZ_ideal']:+.4f} | "
-                 f"{r['ZZ_noisy']:+.4f} | {r['abs_error']:.4f} |")
+                 f"{r['abs_err']:.2e} | {r['fidelity']:.4f} |")
     L += ["",
-          "**Interpretation (honest):** Each processor runs the *identical* native 6-CX chain",
-          "circuit, so the noisy <ZZZZ> values differ only by shot sampling — i.e. **solution",
-          "accuracy is architecture-independent**. The architecture difference is entirely in the",
-          "**routed cost** (A: 9 CX / depth 36 vs B & C: 6 CX / depth 13). That extra routing is",
-          "what accumulates additional 2-qubit-gate error when the algorithm is mapped onto the",
-          "real chip, so A pays a ~50% higher CX / ~3× depth noise budget for identical physics."]
-    L += ["", "## Headline architecture finding (g=1.0)", "",
-          f"* Processor A: **{A['cx']} CX, depth {A['depth']}, {A['swaps']} SWAPs**",
-          f"* Processor B: **{B['cx']} CX, depth {B['depth']}, {B['swaps']} SWAPs**",
-          f"* Proposed C: **{C['cx']} CX, depth {C['depth']}, {C['swaps']} SWAPs**"]
+          "Energy/fidelity depend only on the optimized parameters, not the chip, so these are "
+          "**identical by design** — the architecture signal lives in the cost columns (§1) and "
+          "the noisy-accuracy columns (§3).", "",
+          "## 3 · NOISY, shot-based VQE energy on each processor's ROUTED circuit (g=1.0)", "",
+          "Same noise model (0.5% depol. on CX, 0.1% on 1Q), same 8192-shot budget, 3 seeds. "
+          "`E_exact = " + f"{n['A']['E_exact']:.4f}" + "` Ha.", "",
+          "| Proc | logical 2Q | routed CX | depth | SWAP | E_noisy (mean) | σ | |E−E_exact| |",
+          "|---|---|---|---|---|---|---|---|"]
+    for p in ("A", "B", "C"):
+        r = n[p]
+        L.append(f"| {p} | {r['logical_2q']} | {r['cx']} | {r['depth']} | {r['swaps']} | "
+                 f"{r['E_noisy_mean']:+.4f} | {r['E_noisy_std']:.4f} | {r['abs_err_vs_exact']:.4f} |")
+    A_e, B_e = n["A"]["abs_err_vs_exact"], n["B"]["abs_err_vs_exact"]
+    L += ["",
+          "**Interpretation (honest, P1):** With routing noise included, Processor A's extra "
+          f"CX gates (depth {A['depth']} vs {B['depth']}) degrade the noisy energy estimate. A's error "
+          f"|E−E_exact| = {A_e:.4f} Ha vs B's {B_e:.4f} Ha. This is the evidence that a higher routed "
+          "gate count can cost accuracy — not merely an assumption. Variability (σ) is reported "
+          "across 3 independent shot/seed runs.", "",
+          "## 4 · Scope of the claim", "",
+          "For **this 4-site VQE workload**, processor connectivity changes transpiled circuit "
+          "cost, and the added gate overhead **can** increase noise sensitivity. We do not claim "
+          "a universal 'routing is the bottleneck' result beyond this instance.", "",
+          "## 5 · Processor C — simulated proposed topology", "",
+          "Processor C is a **simulated, proposed** 6-qubit open path: 4 qubits run the VQE, "
+          f"2 are **reserved (currently unused)**. It matches B's cost (CX {C['cx']}, depth "
+          f"{C['depth']}, {C['swaps']} SWAP) with fewer qubits. The reserved qubits are a design "
+          "placeholder for future ancilla-based mitigation — **no mitigation benefit is claimed "
+          "or measured** in this submission."]
     with open(os.path.join(RES, "RESULTS.md"), "w", encoding="utf-8") as f:
         f.write("\n".join(L) + "\n")
 

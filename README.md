@@ -2,90 +2,110 @@
 
 **PS-S1 · Quantum Simulation Track · Phase 1 submission**
 
-We study how **chip topology**, not the algorithm, becomes the bottleneck for variational
-quantum simulation. Using VQE on a 4-site Transverse-Field Ising Model (TFIM), we
-benchmark the *same* algorithm on two fixed architectures (Processor A and B), prove
-that A's sparse, chorded connectivity inflates circuit cost by **50% in CX count and
-~3× in depth**, show this overhead compounds under noise, and then **design Processor C**
-to eliminate it — the co-design loop the challenge asks for.
+We study how **processor connectivity** changes the hardware cost of running the *same*
+variational algorithm. Using VQE on a 4-site Transverse-Field Ising Model (TFIM), we
+benchmark on two fixed architectures (**Processor A**, **Processor B**) and a **simulated
+proposed Processor C**, measuring transpiled circuit cost and noisy shot-based energy
+accuracy under identical conditions.
 
-> **Headline (g = 1.0):** Processor A needs **9 CX / depth 36 / 1 SWAP**; Processor B and
-> our proposed Processor C need **6 CX / depth 13 / 0 SWAPs** — A pays a **50% higher CX and
-> ~3× deeper** noise budget for *identical* physics. Accuracy itself is architecture-independent
-> (verified: running the native circuit on all three gives the same `<ZZZZ>`); it is the
-> **routing cost** — not the algorithm — that varies with the chip.
+> **Scope of the claim (intentionally narrow).** For **this 4-site VQE workload**,
+> processor connectivity changes transpiled circuit cost, and the added gate overhead
+> **can** increase noise sensitivity. We do **not** claim a universal "routing is the
+> bottleneck" result beyond this instance.
+
+---
+
+## Headline results (g = 1.0)
+
+**Circuit cost** (identical 2-layer ansatz, `seed_transpiler=42`, measured not inferred):
+
+| Processor | logical 2Q | routed CX | depth | measured SWAP |
+|---|---|---|---|---|
+| A (5q, chorded) | 6 | **9** | **33** | **1** |
+| B (9q, heavy-hex) | 6 | 6 | 13 | 0 |
+| **C (simulated, 6q path)** | 6 | 6 | 13 | 0 |
+
+All three start from the **same 6 logical two-qubit gates**. Routing onto A's chorded map
+raises CX to 9 (depth 33, 1 measured SWAP); B and C need no SWAPs.
+
+**Noisy, shot-based VQE energy** on each processor's **routed** circuit (same noise model —
+0.5% depolarizing on CX, 0.1% on 1Q — same 8192-shot budget, 3 seeds; `E_exact = -4.7588` Ha):
+
+| Processor | routed CX / depth | E_noisy (mean) | σ | \|E − E_exact\| |
+|---|---|---|---|---|
+| A | 9 / 33 | −4.3802 | 0.0231 | **0.379** |
+| B | 6 / 13 | −4.5396 | 0.0170 | **0.219** |
+| C | 6 / 13 | −4.5396 | 0.0170 | **0.219** |
+
+Processor A's extra routing gates measurably degrade the noisy energy estimate (error
+**0.379** vs **0.219** Ha) — this is measured evidence, not an assumption, that a higher
+routed gate count can cost accuracy.
+
+**Ideal (noiseless) VQE** is identical across processors *by construction* — energy and
+fidelity depend only on the optimized parameters, not the chip. VQE converges to error
+10⁻³–10⁻⁴ Ha with fidelity 0.998–1.000 against exact diagonalization.
 
 ---
 
 ## Why this matters
-Variational algorithms (VQE/QAOA) are the leading near-term candidates for quantum
-advantage, but their success is decided by the hardware they run on. A nearest-neighbour
-interaction like `Z_i Z_{i+1}` requires a CNOT between *connected* qubits. When the chip's
-coupling map doesn't contain that edge, the compiler inserts **SWAP gates** — each costing
-3 extra CNOTs — which deepen the circuit and multiply the noise. This project quantifies
-exactly that effect and uses it to *design a better chip*.
+Variational algorithms (VQE/QAOA) are leading near-term candidates for quantum advantage,
+but their success is decided by the hardware. A nearest-neighbour interaction like
+`Z_i Z_{i+1}` needs a CNOT between *connected* qubits. When the chip lacks that edge, the
+compiler inserts **SWAP gates** (each = 3 CNOTs), deepening the circuit and adding noise.
 
-## The architecture finding (not obvious from a tutorial)
+## The architecture finding
 Processor A's coupling map is `(0,1),(1,2),(1,3),(3,4)`. The edge `(1,3)` is a **chord that
-skips qubit 2**. To lay out the 4-site chain `0-1-2-3`, the router must route through the
-hub `qubit 1` twice, forcing an extra SWAP and a 3× depth blow-up. Processor B contains a
-clean 6-cycle `0-1-2-3-4-5-6`, so the identical chain maps **with zero SWAPs**. We prove this
-both structurally and by measuring transpiled CX/depth on each real coupling map.
+skips qubit 2** — routing the chain `0-1-2-3` forces an extra SWAP and ~2.5× depth.
+Processor B contains a clean cycle `0-1-2-3-4-5-6`, so the identical chain maps with **zero
+SWAPs**. We verify this by transpiling onto each real coupling map with a **fixed
+`seed_transpiler`** and reporting logical count, routed CX, depth, and measured SWAP ops
+separately.
+
+## Honest methodology
+- **Reproducible:** `seed_transpiler=42` fixed; identical compilation settings for A/B/C.
+- **Measured, not inferred:** logical 2Q, routed CX, depth, and SWAP are each reported
+  independently — SWAP count is read from the routed circuit, never back-computed.
+- **Fair noise comparison:** same noise model and shot budget for all three; 3 seeds give
+  reported variability (σ).
+- **Correctness checked:** exact ground state (`-4.7588` Ha) verified against an independent
+  term-by-term Hamiltonian construction.
 
 ## Repository layout
 ```
-├── main.ipynb              # the runnable solution notebook (deliverable)
+├── main.ipynb              # runnable solution notebook (deliverable)
+├── main_executed.ipynb     # executed copy (proof it runs end-to-end)
+├── index.html              # demo website (GitHub Pages)
 ├── requirements.txt        # pinned environment
 ├── processors/             # coupling maps (source of truth)
 │   ├── A.json              # 5-qubit Phase-1 benchmark
 │   ├── B.json              # 9-qubit heavy-hex Phase-1 benchmark
-│   └── C.json              # our proposed Phase-2 processor
+│   └── C.json              # simulated proposed processor
 ├── src/
 │   ├── engine.py           # TFIM Hamiltonian, exact diagonalisation, VQE ansatz
-│   └── experiment.py       # full benchmark: optimise, transpile, noise, plot
+│   └── experiment.py       # benchmark: optimise, transpile, noisy energy, plots
 └── results/                # all figures + tables (generated)
-    ├── coupling_maps.png   # A vs B vs C topology
-    ├── architecture_cost.png  # THE key figure: A vs B vs C cost
-    ├── energy_error.png    # VQE accuracy vs field g
-    ├── noise_impact.png    # noise-induced observable error
-    ├── vqe_results.csv     # full metric table
-    ├── noise_results.csv
-    └── RESULTS.md          # auto-generated summary
 ```
 
 ## Reproduce (3 steps)
 ```bash
 pip install -r requirements.txt
 cd src
-python experiment.py        # ~40 s; regenerates everything in ../results
+python experiment.py        # ~20 s; regenerates everything in ../results
 ```
+Or execute the notebook: `jupyter nbconvert --to notebook --execute main.ipynb`
 
-## Metrics (all produced by `experiment.py`)
-| Processor | CX | Depth | SWAPs | native `<ZZZZ>` (g=1.0) |
-|---|---|---|---|---|
-| A (5q, chorded) | 9 | 36 | 1 | ~0.23 (same as B/C) |
-| B (9q, heavy-hex) | 6 | 13 | 0 | ~0.23 |
-| **C (proposed, 6q path)** | **6** | **13** | **0** | ~0.23 |
-
-The `native <ZZZZ>` column confirms **accuracy is architecture-independent** — all three run
-the same 6-CX chain circuit. The difference is entirely the **routed cost**, which is what
-compounds 2-qubit-gate error on a real chip.
-
-VQE reaches the ground state with energy error ~10⁻¹ Ha and fidelity rising from 0.52 (g=0.5,
-ordered phase) to 0.97 (g=1.5, paramagnetic phase), reproducing the expected TFIM physics and
-matching exact diagonalisation to within optimizer tolerance.
-
-## Processor C — the co-design payoff
-Processor C is a **6-qubit open path** `(0,1),(1,2),(2,3),(3,4),(4,5)`. It is the minimal
-architecture that hosts the 4-site chain **with zero SWAP overhead** while adding one spare
-qubit for future ancilla-based error mitigation. It matches B's best-case cost (6 CX / depth
-13) using **half the qubits**, proving B's extra connectivity is unnecessary for this workload
-— a genuine, quantified architecture simplification.
+## Processor C — simulated proposed topology
+Processor C is a **simulated, proposed** 6-qubit open path
+`(0,1),(1,2),(2,3),(3,4),(4,5)`: **4 qubits run the VQE, 2 are reserved (currently
+unused)**. It matches B's cost (6 CX / depth 13 / 0 SWAP) with fewer qubits. The reserved
+qubits are a design placeholder for future ancilla-based mitigation — **no mitigation
+benefit is claimed or measured** in this submission.
 
 ## What we'd do next (Phase 2 readiness)
-- Scale to 6–8 spins to widen the A/B gap (SWAP overhead grows super-linearly with chain length).
-- Add zero-noise extrapolation on Processor C and measure fidelity recovery.
-- Test whether the star-topology hub in A ever *wins* for non-chain (e.g. all-to-all) Hamiltonians.
+- Scale to 6–8 spins to widen the A/B routing gap.
+- Implement the reserved ancilla on Processor C and *measure* a mitigation benefit.
+- Add zero-noise extrapolation and compare fidelity recovery A vs B vs C.
+- Test whether A's hub topology ever wins for non-chain (e.g. all-to-all) Hamiltonians.
 
 ---
 *Built for the Algorithm↔Architecture Co-Design Challenge. All numbers are reproducible from `src/experiment.py`.*

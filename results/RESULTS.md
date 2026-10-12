@@ -1,36 +1,50 @@
 # PS-S1 Results (all numbers produced by src/experiment.py)
 
-## VQE accuracy per processor
+## 1 · Circuit cost per processor (g = 1.0, identical 2-layer ansatz)
 
-| g | Proc | E_VQE | E_exact | abs err | fidelity | mag | CX | depth | SWAP |
-|---|---|---|---|---|---|---|---|---|---|
-| 0.5 | A | -3.279811 | -3.382128 | 1.02e-01 | 0.5169 | +0.5042 | 9 | 35 | 1 |
-| 0.5 | B | -3.279811 | -3.382128 | 1.02e-01 | 0.5169 | +0.5042 | 6 | 13 | 0 |
-| 0.5 | C | -3.279811 | -3.382128 | 1.02e-01 | 0.5169 | +0.5042 | 6 | 13 | 0 |
-| 1.0 | A | -4.318299 | -4.639561 | 3.21e-01 | 0.7937 | +0.8907 | 9 | 36 | 1 |
-| 1.0 | B | -4.318299 | -4.639561 | 3.21e-01 | 0.7937 | +0.8907 | 6 | 13 | 0 |
-| 1.0 | C | -4.318299 | -4.639561 | 3.21e-01 | 0.7937 | +0.8907 | 6 | 13 | 0 |
-| 1.5 | A | -6.180601 | -6.392627 | 2.12e-01 | 0.9660 | +0.7500 | 9 | 33 | 1 |
-| 1.5 | B | -6.180601 | -6.392627 | 2.12e-01 | 0.9660 | +0.7500 | 6 | 13 | 0 |
-| 1.5 | C | -6.180601 | -6.392627 | 2.12e-01 | 0.9660 | +0.7500 | 6 | 13 | 0 |
+Reported separately — logical gate count, routed CX, depth, and **measured** SWAP ops.
+No quantity is inferred from another. `seed_transpiler=42` fixed for reproducibility.
 
-## Noise study (g=1.0, fair native-circuit comparison, 20k shots)
+| Proc | logical 2Q | routed CX | depth | measured SWAP |
+|---|---|---|---|---|
+| A | 6 | 9 | 33 | 1 |
+| B | 6 | 6 | 13 | 0 |
+| C | 6 | 6 | 13 | 0 |
 
-| Proc | routed CX | routed depth | <ZZZZ> ideal | <ZZZZ> noisy | abs err |
+All three start from the same **6** logical two-qubit gates. Routing onto Processor A's chorded map raises CX to **9** (depth 33, 1 measured SWAP); B and C need no SWAPs (CX 6, depth 13).
+
+## 2 · Ideal (noiseless) VQE accuracy — identical across processors by construction
+
+| g | Proc | E_VQE | E_exact | abs err | fidelity |
 |---|---|---|---|---|---|
-| A | 9 | 36 | +0.2302 | +0.2213 | 0.0089 |
-| B | 6 | 13 | +0.2302 | +0.2169 | 0.0133 |
-| C | 6 | 13 | +0.2302 | +0.2241 | 0.0061 |
+| 0.5 | A | -3.425842 | -3.427034 | 1.19e-03 | 0.9980 |
+| 0.5 | B | -3.425842 | -3.427034 | 1.19e-03 | 0.9980 |
+| 0.5 | C | -3.425842 | -3.427034 | 1.19e-03 | 0.9980 |
+| 1.0 | A | -4.758081 | -4.758770 | 6.89e-04 | 0.9999 |
+| 1.0 | B | -4.758081 | -4.758770 | 6.89e-04 | 0.9999 |
+| 1.0 | C | -4.758081 | -4.758770 | 6.89e-04 | 0.9999 |
+| 1.5 | A | -6.503724 | -6.503892 | 1.67e-04 | 1.0000 |
+| 1.5 | B | -6.503724 | -6.503892 | 1.67e-04 | 1.0000 |
+| 1.5 | C | -6.503724 | -6.503892 | 1.67e-04 | 1.0000 |
 
-**Interpretation (honest):** Each processor runs the *identical* native 6-CX chain
-circuit, so the noisy <ZZZZ> values differ only by shot sampling — i.e. **solution
-accuracy is architecture-independent**. The architecture difference is entirely in the
-**routed cost** (A: 9 CX / depth 36 vs B & C: 6 CX / depth 13). That extra routing is
-what accumulates additional 2-qubit-gate error when the algorithm is mapped onto the
-real chip, so A pays a ~50% higher CX / ~3× depth noise budget for identical physics.
+Energy/fidelity depend only on the optimized parameters, not the chip, so these are **identical by design** — the architecture signal lives in the cost columns (§1) and the noisy-accuracy columns (§3).
 
-## Headline architecture finding (g=1.0)
+## 3 · NOISY, shot-based VQE energy on each processor's ROUTED circuit (g=1.0)
 
-* Processor A: **9 CX, depth 36, 1 SWAPs**
-* Processor B: **6 CX, depth 13, 0 SWAPs**
-* Proposed C: **6 CX, depth 13, 0 SWAPs**
+Same noise model (0.5% depol. on CX, 0.1% on 1Q), same 8192-shot budget, 3 seeds. `E_exact = -4.7588` Ha.
+
+| Proc | logical 2Q | routed CX | depth | SWAP | E_noisy (mean) | σ | |E−E_exact| |
+|---|---|---|---|---|---|---|---|
+| A | 6 | 9 | 33 | 1 | -4.3802 | 0.0231 | 0.3786 |
+| B | 6 | 6 | 13 | 0 | -4.5396 | 0.0170 | 0.2192 |
+| C | 6 | 6 | 13 | 0 | -4.5396 | 0.0170 | 0.2192 |
+
+**Interpretation (honest, P1):** With routing noise included, Processor A's extra CX gates (depth 33 vs 13) degrade the noisy energy estimate. A's error |E−E_exact| = 0.3786 Ha vs B's 0.2192 Ha. This is the evidence that a higher routed gate count can cost accuracy — not merely an assumption. Variability (σ) is reported across 3 independent shot/seed runs.
+
+## 4 · Scope of the claim
+
+For **this 4-site VQE workload**, processor connectivity changes transpiled circuit cost, and the added gate overhead **can** increase noise sensitivity. We do not claim a universal 'routing is the bottleneck' result beyond this instance.
+
+## 5 · Processor C — simulated proposed topology
+
+Processor C is a **simulated, proposed** 6-qubit open path: 4 qubits run the VQE, 2 are **reserved (currently unused)**. It matches B's cost (CX 6, depth 13, 0 SWAP) with fewer qubits. The reserved qubits are a design placeholder for future ancilla-based mitigation — **no mitigation benefit is claimed or measured** in this submission.
