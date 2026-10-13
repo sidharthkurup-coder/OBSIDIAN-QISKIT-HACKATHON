@@ -164,16 +164,19 @@ def _parity_expect(counts, qubits, all_q):
 
 
 def _x_expect(counts, i, all_q):
-    """<X_i> from all-X-basis counts: parity over all OTHER qubits."""
+    """<X_i> from all-X-basis counts: read qubit i's own bit.
+
+    After Hadamard gates, X-basis measurement maps to Z-basis readout:
+      |+> → |0> (contributes +1)
+      |-> → |1> (contributes -1)
+    So <X_i> = P(qubit i = 0) - P(qubit i = 1).
+    """
     tot = sum(counts.values())
     s = 0
     for bs, c in counts.items():
         b = bs.replace(" ", "")[::-1]
-        par = 1
-        for j in range(all_q):
-            if j != i:
-                par *= (1 if b[j] == "0" else -1)
-        s += c * par
+        # Qubit i's own measurement bit determines <X_i> sign
+        s += c * (1 if b[i] == "0" else -1)
     return s / tot
 
 

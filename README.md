@@ -33,12 +33,12 @@ raises CX to 9 (depth 33, 1 measured SWAP); B and C need no SWAPs.
 
 | Processor | routed CX / depth | E_noisy (mean) | σ | \|E − E_exact\| |
 |---|---|---|---|---|
-| A | 9 / 33 | −4.3802 | 0.0231 | **0.379** |
-| B | 6 / 13 | −4.5396 | 0.0170 | **0.219** |
-| C | 6 / 13 | −4.5396 | 0.0170 | **0.219** |
+| A | 9 / 33 | −4.5041 | 0.0148 | **0.255** |
+| B | 6 / 13 | −4.6069 | 0.0206 | **0.152** |
+| C | 6 / 13 | −4.6069 | 0.0206 | **0.152** |
 
 Processor A's extra routing gates measurably degrade the noisy energy estimate (error
-**0.379** vs **0.219** Ha) — this is measured evidence, not an assumption, that a higher
+**0.255** vs **0.152** Ha) — this is measured evidence, not an assumption, that a higher
 routed gate count can cost accuracy.
 
 **Ideal (noiseless) VQE** is identical across processors *by construction* — energy and
@@ -110,20 +110,20 @@ energy from measurement counts, 3 seeds, mean ± σ):
 
 | g | Topology | routed CX | depth | SWAPs | E_noisy mean | σ | \|E_noisy − E_exact\| |
 |---|---|---|---|---|---|---|---|
-| 0.5 | chain_compatible | 6 | 13 | 0 | −2.6412 | 0.0221 | 0.7859 |
-| 0.5 | edge_deficient | 22 | 49 | 6 | −2.3766 | 0.0252 | 1.0504 |
-| 0.75 | chain_compatible | 6 | 13 | 0 | −2.3872 | 0.0110 | 1.6187 |
-| 0.75 | edge_deficient | 22 | 49 | 6 | −2.1678 | 0.0125 | 1.8381 |
-| 1.0 | chain_compatible | 6 | 13 | 0 | −2.2443 | 0.0156 | 2.5145 |
-| 1.0 | edge_deficient | 22 | 48 | 6 | −2.0294 | 0.0113 | 2.7293 |
-| 1.25 | chain_compatible | 6 | 13 | 0 | −2.2177 | 0.0099 | 3.3883 |
-| 1.25 | edge_deficient | 22 | 48 | 6 | −2.0065 | 0.0188 | 3.5995 |
-| 1.5 | chain_compatible | 6 | 13 | 0 | −2.2843 | 0.0189 | 4.2196 |
-| 1.5 | edge_deficient | 22 | 49 | 6 | −2.0294 | 0.0156 | 4.4745 |
+| 0.5 | chain_compatible | 6 | 13 | 0 | −3.3125 | 0.0349 | 0.1145 |
+| 0.5 | edge_deficient | 22 | 49 | 6 | −2.9869 | 0.0304 | 0.4401 |
+| 0.75 | chain_compatible | 6 | 13 | 0 | −3.8881 | 0.0162 | 0.1177 |
+| 0.75 | edge_deficient | 22 | 49 | 6 | −3.5486 | 0.0106 | 0.4572 |
+| 1.0 | chain_compatible | 6 | 13 | 0 | −4.6069 | 0.0206 | 0.1518 |
+| 1.0 | edge_deficient | 22 | 48 | 6 | −4.2068 | 0.0134 | 0.5520 |
+| 1.25 | chain_compatible | 6 | 13 | 0 | −5.4168 | 0.0066 | 0.1892 |
+| 1.25 | edge_deficient | 22 | 48 | 6 | −4.9342 | 0.0180 | 0.6718 |
+| 1.5 | chain_compatible | 6 | 13 | 0 | −6.2815 | 0.0165 | 0.2224 |
+| 1.5 | edge_deficient | 22 | 49 | 6 | −5.6918 | 0.0186 | 0.8121 |
 
 **Summary of the ablation:**
 - **Routing cost:** The edge-deficient topology required **22 CX / depth 48–49 / 6 SWAPs**, versus **6 CX / depth 13 / 0 SWAPs** for the chain-compatible topology — a **+16 CX (≈3.7×), +35–36 depth, +6 SWAP** overhead in this tested configuration.
-- **Noisy accuracy:** In every tested value of `g`, the edge-deficient topology's noisy VQE energy error was **higher** than the chain-compatible topology's, by **0.22–0.26 Ha**.
+- **Noisy accuracy:** In every tested value of `g`, the edge-deficient topology's noisy VQE energy error was **higher** than the chain-compatible topology's, by **0.33–0.59 Ha**.
 
 **Honest scope:** This is a measured comparison for **this specific 4-site VQE workload
 and these two topologies**. The extra routing gates and the higher noisy error co-occur;

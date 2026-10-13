@@ -100,7 +100,7 @@
   <div class="hero-stats">
     <div class="card"><div class="stat">6 vs 22<small> CX gates — chain vs edge-deficient topology (ablation)</small></div></div>
     <div class="card"><div class="stat">0 vs 6<small> SWAPs required — native vs forced routing</small></div></div>
-    <div class="card"><div class="stat">0.22–0.26 Ha<small> higher noisy error when connectivity is degraded</small></div></div>
+    <div class="card"><div class="stat">0.33–0.59 Ha<small> higher noisy error when connectivity is degraded</small></div></div>
     <div class="card"><div class="stat">0.9999<small>VQE fidelity vs exact ground state</small></div></div>
   </div>
 </div></section>
@@ -130,16 +130,16 @@
   <table>
     <thead><tr><th>Processor</th><th>logical 2Q</th><th>routed CX</th><th>depth</th><th>SWAP</th><th>noisy E err (Ha)</th></tr></thead>
     <tbody>
-      <tr><td><span class="pill a">A</span> 5q · chorded</td><td>6</td><td class="worst">9</td><td class="worst">33</td><td class="worst">1</td><td class="worst">0.379</td></tr>
-      <tr><td><span class="pill b">B</span> 9q · heavy-hex</td><td>6</td><td class="best">6</td><td class="best">13</td><td class="best">0</td><td class="best">0.219</td></tr>
-      <tr><td><span class="pill c">C</span> 6q · simulated</td><td>6</td><td class="best">6</td><td class="best">13</td><td class="best">0</td><td class="best">0.219</td></tr>
+      <tr><td><span class="pill a">A</span> 5q · chorded</td><td>6</td><td class="worst">9</td><td class="worst">33</td><td class="worst">1</td><td class="worst">0.255</td></tr>
+      <tr><td><span class="pill b">B</span> 9q · heavy-hex</td><td>6</td><td class="best">6</td><td class="best">13</td><td class="best">0</td><td class="best">0.152</td></tr>
+      <tr><td><span class="pill c">C</span> 6q · simulated</td><td>6</td><td class="best">6</td><td class="best">13</td><td class="best">0</td><td class="best">0.152</td></tr>
     </tbody>
   </table>
   <div class="note" style="margin-top:18px"><b>Read this carefully (honest):</b> All three start
   from the <b>same 6 logical two-qubit gates</b> — so <i>ideal</i> energy/fidelity are identical
   by construction. The difference appears in (a) the <b>routed cost</b> after transpiling onto
   each real coupling map, and (b) the <b>noisy energy error</b>, where Processor A's extra routing
-  gates measurably hurt (0.379 vs 0.219 Ha, same noise + shot budget, 3 seeds). Same algorithm,
+  gates measurably hurt (0.255 vs 0.152 Ha, same noise + shot budget, 3 seeds). Same algorithm,
   different hardware price — for <b>this 4-site workload</b>.</div>
 </div></section>
 

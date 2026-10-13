@@ -35,11 +35,11 @@ Same noise model (0.5% depol. on CX, 0.1% on 1Q), same 8192-shot budget, 3 seeds
 
 | Proc | logical 2Q | routed CX | depth | SWAP | E_noisy (mean) | σ | |E−E_exact| |
 |---|---|---|---|---|---|---|---|
-| A | 6 | 9 | 33 | 1 | -4.3802 | 0.0231 | 0.3786 |
-| B | 6 | 6 | 13 | 0 | -4.5396 | 0.0170 | 0.2192 |
-| C | 6 | 6 | 13 | 0 | -4.5396 | 0.0170 | 0.2192 |
+| A | 6 | 9 | 33 | 1 | -4.5041 | 0.0148 | 0.2547 |
+| B | 6 | 6 | 13 | 0 | -4.6069 | 0.0206 | 0.1518 |
+| C | 6 | 6 | 13 | 0 | -4.6069 | 0.0206 | 0.1518 |
 
-**Interpretation (honest, P1):** With routing noise included, Processor A's extra CX gates (depth 33 vs 13) degrade the noisy energy estimate. A's error |E−E_exact| = 0.3786 Ha vs B's 0.2192 Ha. This is the evidence that a higher routed gate count can cost accuracy — not merely an assumption. Variability (σ) is reported across 3 independent shot/seed runs.
+**Interpretation (honest, P1):** With routing noise included, Processor A's extra CX gates (depth 33 vs 13) degrade the noisy energy estimate. A's error |E−E_exact| = 0.2547 Ha vs B's 0.1518 Ha. This is the evidence that a higher routed gate count can cost accuracy — not merely an assumption. Variability (σ) is reported across 3 independent shot/seed runs.
 
 ## 4 · Scope of the claim
 
