@@ -94,12 +94,81 @@ python experiment.py        # ~20 s; regenerates everything in ../results
 ```
 Or execute the notebook: `jupyter nbconvert --to notebook --execute main.ipynb`
 
+## Coupling-topology ablation study
+
+To test whether the co-design result holds beyond a single topology, we ran an ablation
+comparing two topologies under **identical settings**: same Hamiltonian, same VQE ansatz,
+same optimized parameters `θ`, same noise model (0.5% depol. on CX, 0.1% on 1Q), same
+8192-shot budget, and same 3 seeds. The only variable changed was the coupling graph.
+
+**Topologies tested:**
+- **Chain-compatible** (baseline): `(0,1),(1,2),(2,3),(3,4),(4,5)` — supports all required NN interactions natively.
+- **Edge-deficient**: `(0,1),(2,3),(3,4),(4,5),(0,5)` — removes edge `(1,2)`, adds bridge `(0,5)` to keep the graph connected while forcing longer routing paths.
+
+**Measured results** (transpiled onto each topology with `seed_transpiler=42`; noisy
+energy from measurement counts, 3 seeds, mean ± σ):
+
+| g | Topology | routed CX | depth | SWAPs | E_noisy mean | σ | \|E_noisy − E_exact\| |
+|---|---|---|---|---|---|---|---|
+| 0.5 | chain_compatible | 6 | 13 | 0 | −2.6412 | 0.0221 | 0.7859 |
+| 0.5 | edge_deficient | 22 | 49 | 6 | −2.3766 | 0.0252 | 1.0504 |
+| 0.75 | chain_compatible | 6 | 13 | 0 | −2.3872 | 0.0110 | 1.6187 |
+| 0.75 | edge_deficient | 22 | 49 | 6 | −2.1678 | 0.0125 | 1.8381 |
+| 1.0 | chain_compatible | 6 | 13 | 0 | −2.2443 | 0.0156 | 2.5145 |
+| 1.0 | edge_deficient | 22 | 48 | 6 | −2.0294 | 0.0113 | 2.7293 |
+| 1.25 | chain_compatible | 6 | 13 | 0 | −2.2177 | 0.0099 | 3.3883 |
+| 1.25 | edge_deficient | 22 | 48 | 6 | −2.0065 | 0.0188 | 3.5995 |
+| 1.5 | chain_compatible | 6 | 13 | 0 | −2.2843 | 0.0189 | 4.2196 |
+| 1.5 | edge_deficient | 22 | 49 | 6 | −2.0294 | 0.0156 | 4.4745 |
+
+**Summary of the ablation:**
+- **Routing cost:** The edge-deficient topology required **22 CX / depth 48–49 / 6 SWAPs**, versus **6 CX / depth 13 / 0 SWAPs** for the chain-compatible topology — a **+16 CX (≈3.7×), +35–36 depth, +6 SWAP** overhead in this tested configuration.
+- **Noisy accuracy:** In every tested value of `g`, the edge-deficient topology's noisy VQE energy error was **higher** than the chain-compatible topology's, by **0.22–0.26 Ha**.
+
+**Honest scope:** This is a measured comparison for **this specific 4-site VQE workload
+and these two topologies**. The extra routing gates and the higher noisy error co-occur;
+we report the association rather than claiming universal causation. Three seeds provide
+preliminary variability estimates. See `src/ablation.py` and `results/ablation_results.csv`
+for the full reproducible experiment.
+
+![Ablation study](results/ablation.png)
+
 ## Processor C — simulated proposed topology
 Processor C is a **simulated, proposed** 6-qubit open path
 `(0,1),(1,2),(2,3),(3,4),(4,5)`: **4 qubits run the VQE, 2 are reserved (currently
 unused)**. It matches B's cost (6 CX / depth 13 / 0 SWAP) with fewer qubits. The reserved
 qubits are a design placeholder for future ancilla-based mitigation — **no mitigation
 benefit is claimed or measured** in this submission.
+
+## PS-S1 requirement mapping
+
+Every official requirement from the challenge PDF is mapped to a specific implementation,
+experiment, figure, or command. Source: `Problem_Statment_Details.pdf`, PS-S1 (Quantum
+Simulation Track).
+
+| PDF Requirement | Where satisfied |
+|---|---|
+| **Problem:** Find ground-state energy and magnetization of 1D TFIM, 4 spins, H = −J Σ σᶻσᶻ − g Σ σˣ | `engine.py::tfim_hamiltonian` builds exactly this Hamiltonian (open chain, N=4). Energy from VQE; magnetization from `MAG_OBS` expectation. |
+| **Baseline task:** VQE with suitable ansatz, estimate energy at J=1, g=1; compute ⟨Σσᶻ⟩ | `engine.py::ansatz` (hardware-efficient Ry+CX, 2 layers). `experiment.py::main()` runs at g=1.0. Magnetization reported per processor in `vqe_results.csv`. |
+| **Deliverables:** Notebook with TFIM Hamiltonian, exact diagonalization comparison | `main.ipynb` cell 3 shows Hamiltonian and exact ground state. `engine.py::exact_ground` via `numpy.linalg.eigh`. |
+| **Deliverables:** Run on Processor A/B, report energy, magnetization, fidelity | `experiment.py::main()` loops g ∈ {0.5, 1.0, 1.5} × processors {A, B, C}. All metrics in `results/vqe_results.csv` and `RESULTS.md`. |
+| **Deliverables:** Plot magnetization vs g (optional) | `energy_error.png` shows VQE energy error vs g (closely related). Magnetization data in CSV. |
+| **Metrics:** Accuracy — energy error, magnetization error vs exact | `abs_err` column in `vqe_results.csv`. Exact ground state from `exact_ground()`. |
+| **Metrics:** Architecture — circuit CX count and depth per device | `cx`, `depth` columns in `vqe_results.csv` (routed, `seed_transpiler=42`). |
+| **Metrics:** Number of variational parameters | 8 (REPS=2 × N=4) in `engine.py::ansatz`. Documented in `README.md`. |
+| **Data/Instances:** TFIM with J=1.0, g ∈ {0.5, 1.0, 1.5} | `experiment.py` line: `for g in (0.5, 1.0, 1.5)`. Exactly these values. |
+| **Processor A:** 5-qubit, edges (0,1),(1,2),(1,3),(3,4) | `processors/A.json`. Loaded by `experiment.py::processors()`. |
+| **Processor B:** 9-qubit, heavy-hex, edges (0,1),(1,2),(1,6),(2,3),(2,6),(2,5),(3,4),(4,5),(5,6),(6,7),(6,8),(8,0) | `processors/B.json`. Loaded by `experiment.py::processors()`. |
+| **Calibration:** 2-qubit error ~0.5%, 1-qubit ~0.1% | `processors/A.json` and `B.json`: `two_qubit_gate_error: 0.005`, `one_qubit_gate_error: 0.001`. Loaded and applied in `experiment.py::main()`. |
+| **Submission:** README, environment spec, notebook, data/processor files, results/figures, report | `README.md`, `requirements.txt`, `main.ipynb`, `processors/*.json`, `results/` (4 figures + CSV + JSON + RESULTS.md). |
+| **Reproducibility:** Code must run end-to-end on provided Qiskit backends | Validated: `jupyter nbconvert --to notebook --execute main.ipynb` runs cleanly (see `main_executed.ipynb`). `python src/experiment.py` regenerates all results in ~20 s. |
+
+**Beyond the baseline (additional contributions):**
+- Noisy, shot-based VQE energy estimation on each routed processor (`experiment.py::noisy_energy`)
+- Coupling-topology ablation study (chain-compatible vs edge-deficient) across g sweep (`ablation.py`)
+- Proposed Processor C design with quantified justification (`processors/C.json`)
+- Fixed `seed_transpiler=42` for reproducible architecture comparison
+- Full reproducibility: pinned `requirements.txt`, single command regenerates everything
 
 ## What we'd do next (Phase 2 readiness)
 - Scale to 6–8 spins to widen the A/B routing gap.

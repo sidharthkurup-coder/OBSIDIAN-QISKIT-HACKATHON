@@ -32,13 +32,16 @@ MAG_OBS = SparsePauliOp.from_sparse_list(
 
 def processors():
     out = {}
-    for name in ("A", "B"):
+    for name in ("A", "B", "C"):
         cfg = load(name)
+        # Validate noise params match PDF spec (0.5% 2Q, 0.1% 1Q)
+        p2q = cfg.get("two_qubit_gate_error")
+        p1q = cfg.get("one_qubit_gate_error")
+        if abs(p2q - 0.005) > 1e-6 or abs(p1q - 0.001) > 1e-6:
+            print(f"⚠️  WARNING: {name}.json noise params deviate from PDF spec "
+                  f"(2Q={p2q}, 1Q={p1q})")
         out[name] = {"cfg": cfg, "n": cfg["num_qubits"],
                      "edges": [tuple(e) for e in cfg["coupling_edges"]]}
-    out["C"] = {"cfg": {"name": "Processor C", "num_qubits": 6,
-                        "coupling_edges": [[i, i + 1] for i in range(5)]},
-                "n": 6, "edges": [(i, i + 1) for i in range(5)]}
     return out
 
 def metrics(theta, proc):
@@ -228,20 +231,25 @@ def main():
                   f"depth={m['depth']} SWAP={m['swaps']}")
 
     # ---- P1: NOISY, SHOT-BASED VQE ENERGY on each processor's routed circuit ----
-    # Same noise model + same shot budget for all three; repeat over seeds for variability.
-    # Reports noisy energy error vs EXACT ground state, and how much routing costs A.
+    # Noise parameters read from authoritative processor JSON (PDF: 0.5% 2Q, 0.1% 1Q).
     print("\n" + "=" * 78)
-    print("NOISY VQE ENERGY (g=1.0): routed circuit per processor, 0.5% CX / 0.1% 1Q depol.")
+    print("NOISY VQE ENERGY (g=1.0): routed circuit per processor")
     print("=" * 78)
     H = tfim_hamiltonian(J=1.0, g=1.0)
     E0, _ = exact_ground(H)
     _, th, _ = optimise(H)                 # fixed optimized parameters for all processors
-    nm = NoiseModel()
-    nm.add_all_qubit_quantum_error(depolarizing_error(0.005, 2), ["cx"])
-    nm.add_all_qubit_quantum_error(depolarizing_error(0.001, 1), ["sx", "rz"])
     SHOTS, SEEDS = 8192, (1, 2, 3)
     for pname in ("A", "B", "C"):
         p = procs[pname]
+        cfg = p["cfg"]
+        # Load noise rates from authoritative JSON config
+        p2q = cfg.get("two_qubit_gate_error", 0.005)
+        p1q = cfg.get("one_qubit_gate_error", 0.001)
+        nm = NoiseModel()
+        nm.add_all_qubit_quantum_error(depolarizing_error(p2q, 2), ["cx"])
+        nm.add_all_qubit_quantum_error(depolarizing_error(p1q, 1), ["sx", "rz"])
+        print(f"\n  Proc {pname}: 2Q depol={p2q*100:.2f}%, 1Q depol={p1q*100:.2f}% "
+              f"(from processors/{pname}.json)")
         ests = [noisy_energy(th, H, p, nm, shots=SHOTS, seed=s) for s in SEEDS]
         mean = float(np.mean(ests)); std = float(np.std(ests))
         m = metrics(th, p)
