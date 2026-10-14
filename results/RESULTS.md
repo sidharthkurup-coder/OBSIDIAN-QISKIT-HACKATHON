@@ -33,7 +33,7 @@ Energy/fidelity depend only on the optimized parameters, not the chip, so these 
 
 Same noise model (0.5% depol. on CX, 0.1% on 1Q), same 8192-shot budget, 3 seeds. `E_exact = -4.7588` Ha.
 
-| Proc | logical 2Q | routed CX | depth | SWAP | E_noisy (mean) | σ | |E−E_exact| |
+| Proc | logical 2Q | routed CX | depth | SWAP | E_noisy (mean) | σ | \|E−E_exact\| |
 |---|---|---|---|---|---|---|---|
 | A | 6 | 9 | 33 | 1 | -4.5041 | 0.0148 | 0.2547 |
 | B | 6 | 6 | 13 | 0 | -4.6069 | 0.0206 | 0.1518 |

@@ -334,7 +334,7 @@ def write_report(results_rows, noise_rows):
           "## 3 · NOISY, shot-based VQE energy on each processor's ROUTED circuit (g=1.0)", "",
           "Same noise model (0.5% depol. on CX, 0.1% on 1Q), same 8192-shot budget, 3 seeds. "
           "`E_exact = " + f"{n['A']['E_exact']:.4f}" + "` Ha.", "",
-          "| Proc | logical 2Q | routed CX | depth | SWAP | E_noisy (mean) | σ | |E−E_exact| |",
+          "| Proc | logical 2Q | routed CX | depth | SWAP | E_noisy (mean) | σ | \\|E−E_exact\\| |",
           "|---|---|---|---|---|---|---|---|"]
     for p in ("A", "B", "C"):
         r = n[p]

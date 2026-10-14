@@ -52,6 +52,7 @@
   tr:last-child td{border-bottom:none}
   .best{color:var(--ok);font-weight:700}.worst{color:var(--warn);font-weight:700}
   .figs{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}
+  .figs .fig-wide{grid-column:1/-1}
   figure{margin:0;background:var(--panel);border:1px solid var(--line);border-radius:16px;
     padding:14px;overflow:hidden}
   figure img{width:100%;border-radius:10px;display:block;background:#fff}
@@ -100,8 +101,8 @@
     <b>can increase noise sensitivity</b> — measured, not assumed.</p>
     <div class="cta">
       <a class="btn btn-p" href="main_executed.ipynb">Open Executed Notebook</a>
-      <a class="btn btn-s" href="results/RESULTS.md">Full Results</a>
-      <a class="btn btn-s" href="README.md">README</a>
+      <a class="btn btn-s" href="results.html">Full Results</a>
+      <a class="btn btn-s" href="readme.html">README</a>
     </div>
   </div>
 </header>
@@ -259,10 +260,10 @@
   <h2><span class="n">06</span>Figures</h2>
   <div class="figs">
     <figure><img src="results/architecture_cost.png" alt="Architecture cost"><figcaption>Circuit cost at g=1.0 — Processor A towers over B &amp; C</figcaption></figure>
-    <figure><img src="results/coupling_maps.png" alt="Coupling maps"><figcaption>The three topologies (A chorded, B heavy-hex, C path)</figcaption></figure>
+    <figure class="fig-wide"><img src="results/coupling_maps.png" alt="Coupling maps"><figcaption>The three topologies (A chorded, B heavy-hex, C path)</figcaption></figure>
     <figure><img src="results/energy_error.png" alt="Energy error"><figcaption>VQE energy error vs transverse field g</figcaption></figure>
     <figure><img src="results/noise_impact.png" alt="Noise impact"><figcaption>Noisy VQE energy error vs exact ground state per processor</figcaption></figure>
-    <figure><img src="results/ablation.png" alt="Ablation study"><figcaption>Ablation: chain-compatible vs edge-deficient across g sweep</figcaption></figure>
+    <figure class="fig-wide"><img src="results/ablation.png" alt="Ablation study"><figcaption>Ablation: chain-compatible vs edge-deficient across g sweep</figcaption></figure>
   </div>
 </div></section>
 
