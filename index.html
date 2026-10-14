@@ -393,9 +393,12 @@ function expShow(){
   function card(v,k,sub,cls){return '<div class="exp-card"><div class="v '+(cls||'')+'">'+v+'</div><div class="k">'+k+'</div>'+(sub?'<div class="sub">'+sub+'</div>':'')+'</div>';}
   let h='';
   h+=card(r.E_exact.toFixed(6),'E exact (Ha)','exact diagonalization');
-  h+=card(r.E_vqe.toFixed(6),'E VQE ideal (Ha)','err '+r.ideal_err.toExponential(2)+' Ha');
-  h+=card(r.fidelity.toFixed(4),'fidelity','vs exact ground state');
-  if(r.E_noisy!==null){
+  // ideal_err not stored for ablation rows — compute it; fidelity not recorded there either
+  const idealErr = (r.ideal_err!=null) ? r.ideal_err : Math.abs(r.E_vqe - r.E_exact);
+  h+=card(r.E_vqe.toFixed(6),'E VQE ideal (Ha)','err '+idealErr.toExponential(2)+' Ha');
+  h+=card(r.fidelity!=null ? r.fidelity.toFixed(4) : 'n/a','fidelity',
+      r.fidelity!=null ? 'vs exact ground state' : 'not recorded for ablation');
+  if(r.E_noisy!=null){
     h+=card(r.E_noisy.toFixed(4),'E noisy (Ha)','±'+r.noisy_sigma.toFixed(4)+' (3 seeds)', r.noisy_err>0.3?'bad':'good');
     h+=card(r.noisy_err.toFixed(4),'|E_noisy − E_exact|','shot-based, 8192 shots', r.noisy_err>0.3?'bad':'good');
   } else {
