@@ -117,37 +117,12 @@ def _measure_group(theta, proc, basis, noise, shots, seed):
     tr = transpile(qc, coupling_map=CouplingMap(proc["edges"]),
                    initial_layout=list(range(N)),
                    basis_gates=["rz", "sx", "x", "cx"],
-                   optimization_level=0, seed_transpiler=seed)   # routing NOT applied (lvl 0)
+                   # optimization_level=0 minimises compiler passes; routing may still be
+                   # inserted if the layout requires it. Counts stay keyed by logical qubit
+                   # because measure_all() labels follow the classical register order.
+                   optimization_level=0, seed_transpiler=seed)
     sim = AerSimulator(noise_model=noise, shots=shots, seed_simulator=seed)
     return sim.run(tr, shots=shots).result().get_counts()
-
-
-def _z_string_energy(counts):
-    """<ZZ..Z> parity over logical qubits from Z-basis counts."""
-    tot = sum(counts.values())
-    s = 0
-    for bs, c in counts.items():
-        b = bs.replace(" ", "")[::-1]
-        par = 1
-        for i in range(len(b)):
-            par *= (1 if b[i] == "0" else -1)
-        s += c * par
-    return s / tot
-
-
-def _x_sum(counts, n):
-    """(1/n) * sum_i <X_i>: parity of all logical qubits except i, from all-X counts."""
-    tot = sum(counts.values())
-    s = 0
-    for bs, c in counts.items():
-        b = bs.replace(" ", "")[::-1]
-        for i in range(n):
-            par = 1
-            for j in range(n):
-                if j != i:
-                    par *= (1 if b[j] == "0" else -1)
-            s += c * par
-    return s / (tot * n)
 
 
 def _parity_expect(counts, qubits, all_q):

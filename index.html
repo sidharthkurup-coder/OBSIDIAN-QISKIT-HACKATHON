@@ -75,6 +75,16 @@
   .tab:hover{border-color:var(--accent)}
   .tab.active{background:linear-gradient(90deg,rgba(76,201,240,.18),rgba(123,97,255,.18));
     border-color:var(--accent);color:#fff}
+  .explorer-controls{display:flex;gap:26px;flex-wrap:wrap;margin-bottom:20px}
+  .ctl-group label{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.08em;
+    color:var(--mut);margin-bottom:7px;font-weight:700}
+  .exp-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}
+  .exp-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+  .exp-card .v{font-size:26px;font-weight:800;letter-spacing:-.02em;color:var(--ink);
+    font-variant-numeric:tabular-nums}
+  .exp-card .v.good{color:var(--ok)} .exp-card .v.bad{color:var(--warn)}
+  .exp-card .k{font-size:12px;color:var(--mut);margin-top:3px}
+  .exp-card .sub{font-size:11.5px;color:#5a6a90;margin-top:5px}
   table td,table th{border-bottom:1px solid var(--line)}
   @media(max-width:860px){.g3,.g2,.figs,.hero-stats{grid-template-columns:1fr}}
 </style>
@@ -166,7 +176,7 @@
   
   <div class="note"><b>Measured result (g sweep, 3 seeds each):</b> The edge-deficient topology
   required <b>+16 CX (≈3.7×), +35–36 depth, +6 SWAP</b> overhead. In every tested value of
-  <code>g ∈ {0.5, 0.75, 1.0, 1.25, 1.5}</code>, its noisy VQE energy error was <b>0.22–0.26 Ha
+  <code>g ∈ {0.5, 0.75, 1.0, 1.25, 1.5}</code>, its noisy VQE energy error was <b>0.33–0.59 Ha
   higher</b> than the chain-compatible topology's. This is a measured association for this
   workload and these two topologies; we report the co-occurrence rather than claiming universal
   causation. Full data: <code>results/ablation_results.csv</code>.</div>
@@ -211,8 +221,42 @@
   </div>
 </div></section>
 
+
 <section><div class="wrap">
-  <h2><span class="n">05</span>Figures</h2>
+  <h2><span class="n">05</span>Experiment explorer</h2>
+  <p class="lead">Choose a processor and field strength <code>g</code> to inspect the
+  <b>precomputed</b> experimental results (from <code>src/experiment.py</code>). Noisy energy
+  was run at <code>g=1.0</code> only for the main benchmark; the ablation covers all five
+  <code>g</code> values. Source data:
+  <a href="results/metrics.json">metrics.json</a> ·
+  <a href="results/ablation_results.csv">ablation_results.csv</a>.</p>
+
+  <div class="explorer-controls">
+    <div class="ctl-group">
+      <label>Experiment</label>
+      <div class="topo-tabs" id="expMode">
+        <button class="tab active" data-m="main">Main benchmark (A/B/C)</button>
+        <button class="tab" data-m="ablation">Ablation (chain vs edge-deficient)</button>
+      </div>
+    </div>
+    <div class="ctl-group">
+      <label id="expSelLabel">Processor</label>
+      <div class="topo-tabs" id="expSel"></div>
+    </div>
+    <div class="ctl-group">
+      <label>Transverse field g</label>
+      <div class="topo-tabs" id="expG"></div>
+    </div>
+  </div>
+
+  <div class="exp-cards" id="expCards"></div>
+  <p style="font-size:12.5px;color:#93a1c7;margin-top:12px">All values precomputed with
+  <code>seed_transpiler=42</code>, 8192 shots, 3 seeds (1, 2, 3). σ = sample standard
+  deviation across those seeds. "n/a" = noisy energy not run for that combination.</p>
+</div></section>
+
+<section><div class="wrap">
+  <h2><span class="n">06</span>Figures</h2>
   <div class="figs">
     <figure><img src="results/architecture_cost.png" alt="Architecture cost"><figcaption>Circuit cost at g=1.0 — Processor A towers over B &amp; C</figcaption></figure>
     <figure><img src="results/coupling_maps.png" alt="Coupling maps"><figcaption>The three topologies (A chorded, B heavy-hex, C path)</figcaption></figure>
@@ -223,23 +267,40 @@
 </div></section>
 
 <section><div class="wrap">
-  <h2><span class="n">06</span>Honest methodology</h2>
+  <h2><span class="n">07</span>Validation &amp; reproducibility</h2>
   <div class="grid g2">
-    <div class="card"><h3>✅ What we measured</h3>
-      <p>Exact diagonalization gives ground truth (<code>-4.7588</code> Ha, independently verified).
-      Cost is measured by transpiling onto each <i>real</i> coupling map with a <b>fixed
-      <code>seed_transpiler=42</code></b>. Noisy energy uses identical noise + 8192 shots over 3
-      seeds, reported with σ.</p></div>
-    <div class="card"><h3>⚖️ Honest framing</h3>
-      <p>Logical 2Q, routed CX, depth and SWAP are each reported <b>separately</b> — never inferred
-      from one another. Ideal accuracy is identical across chips <i>by construction</i>; the signal
-      is the routed cost and the measured noisy-energy gap. The claim is scoped to <b>this 4-site
-      workload</b> only.</p></div>
+    <div class="card"><h3>✅ Reference &amp; correctness</h3>
+      <p><b>Ground truth:</b> exact diagonalization of the 4-site TFIM Hamiltonian
+      (<code>E₀ = −4.758770</code> Ha at g=1.0), computed with <code>numpy.linalg.eigvalsh</code>
+      and independently verified against a term-by-term Pauli construction.
+      Ideal VQE reaches <b>10⁻³–10⁻⁴ Ha</b> error with fidelity 0.998–1.000.</p></div>
+    <div class="card"><h3>🎚️ Noise assumptions</h3>
+      <p><b>Depolarizing noise</b> read from the authoritative processor JSON files:
+      <b>0.5% per CX</b>, <b>0.1% per 1Q gate</b> (matching the challenge spec).
+      Same noise model for every processor in every comparison — no processor gets a
+      gentler noise budget.</p></div>
+    <div class="card"><h3>🎲 Shots &amp; seeds</h3>
+      <p><b>8192 shots</b> per measurement group, <b>3 seeds (1, 2, 3)</b> per data point.
+      σ is the <b>sample standard deviation across those three seeds</b> — a
+      <b>preliminary variability estimate, not strong statistical proof</b>. Error bars in
+      plots are ±1σ. Cost metrics use a fixed <code>seed_transpiler=42</code>.</p></div>
+    <div class="card"><h3>🧩 What is official vs ours</h3>
+      <p><b>Processor A &amp; B</b>: official challenge benchmarks (coupling maps + noise from
+      the PDF spec). <b>Chain-compatible vs edge-deficient</b>: our custom topology ablation
+      (clearly labelled, not part of the official benchmark). <b>Processor C</b>: our
+      simulated proposed architecture — 4 qubits run the VQE, 2 reserved, no mitigation
+      benefit claimed.</p></div>
   </div>
+  <div class="note" style="margin-top:18px"><b>Reproduce everything:</b>
+  <code>pip install -r requirements.txt</code> →
+  <code>cd src &amp;&amp; python experiment.py</code> (~20 s) →
+  <code>python ablation.py</code> (~25 s) →
+  or run the notebook end-to-end: <code>jupyter nbconvert --to notebook --execute main.ipynb</code>.
+  Every table and figure regenerates from these commands; no numbers are hand-typed.</div>
 </div></section>
 
 <section><div class="wrap">
-  <h2><span class="n">07</span>Reproduce in 3 steps</h2>
+  <h2><span class="n">08</span>Reproduce in 3 steps</h2>
   <div class="card">
     <p style="margin-bottom:12px">All figures regenerate in ~45 seconds:</p>
     <p><code>pip install -r requirements.txt</code></p>
@@ -303,6 +364,56 @@ document.querySelectorAll('#topoTabs .tab').forEach(b=>b.addEventListener('click
   b.classList.add('active'); draw(b.dataset.t);
 }));
 draw('A');
+
+// ===== Experiment Explorer data (from results/metrics.json + results/ablation_results.csv) =====
+const EXP_DATA = {"main":[{"g":0.5,"proc":"A","E_exact":-3.427034,"E_vqe":-3.425842,"ideal_err":0.001192,"fidelity":0.998,"cx":9,"depth":33,"swaps":1,"logical_2q":6,"E_noisy":null,"noisy_sigma":null,"noisy_err":null},{"g":0.5,"proc":"B","E_exact":-3.427034,"E_vqe":-3.425842,"ideal_err":0.001192,"fidelity":0.998,"cx":6,"depth":13,"swaps":0,"logical_2q":6,"E_noisy":null,"noisy_sigma":null,"noisy_err":null},{"g":0.5,"proc":"C","E_exact":-3.427034,"E_vqe":-3.425842,"ideal_err":0.001192,"fidelity":0.998,"cx":6,"depth":13,"swaps":0,"logical_2q":6,"E_noisy":null,"noisy_sigma":null,"noisy_err":null},{"g":1.0,"proc":"A","E_exact":-4.75877,"E_vqe":-4.758081,"ideal_err":0.000689,"fidelity":0.9999,"cx":9,"depth":33,"swaps":1,"logical_2q":6,"E_noisy":-4.5041,"noisy_sigma":0.0148,"noisy_err":0.2547},{"g":1.0,"proc":"B","E_exact":-4.75877,"E_vqe":-4.758081,"ideal_err":0.000689,"fidelity":0.9999,"cx":6,"depth":13,"swaps":0,"logical_2q":6,"E_noisy":-4.6069,"noisy_sigma":0.0206,"noisy_err":0.1518},{"g":1.0,"proc":"C","E_exact":-4.75877,"E_vqe":-4.758081,"ideal_err":0.000689,"fidelity":0.9999,"cx":6,"depth":13,"swaps":0,"logical_2q":6,"E_noisy":-4.6069,"noisy_sigma":0.0206,"noisy_err":0.1518},{"g":1.5,"proc":"A","E_exact":-6.503892,"E_vqe":-6.503724,"ideal_err":0.000167,"fidelity":1.0,"cx":9,"depth":35,"swaps":1,"logical_2q":6,"E_noisy":null,"noisy_sigma":null,"noisy_err":null},{"g":1.5,"proc":"B","E_exact":-6.503892,"E_vqe":-6.503724,"ideal_err":0.000167,"fidelity":1.0,"cx":6,"depth":13,"swaps":0,"logical_2q":6,"E_noisy":null,"noisy_sigma":null,"noisy_err":null},{"g":1.5,"proc":"C","E_exact":-6.503892,"E_vqe":-6.503724,"ideal_err":0.000167,"fidelity":1.0,"cx":6,"depth":13,"swaps":0,"logical_2q":6,"E_noisy":null,"noisy_sigma":null,"noisy_err":null}],"ablation":[{"g":0.5,"topo":"chain_compatible","E_exact":-3.427034,"E_vqe":-3.425842,"cx":6,"depth":13,"swaps":0,"logical_2q":6,"E_noisy":-3.3125,"noisy_sigma":0.0349,"noisy_err":0.1145},{"g":0.5,"topo":"edge_deficient","E_exact":-3.427034,"E_vqe":-3.425842,"cx":22,"depth":49,"swaps":6,"logical_2q":6,"E_noisy":-2.9869,"noisy_sigma":0.0304,"noisy_err":0.4401},{"g":0.75,"topo":"chain_compatible","E_exact":-4.005816,"E_vqe":-4.004892,"cx":6,"depth":13,"swaps":0,"logical_2q":6,"E_noisy":-3.8881,"noisy_sigma":0.0162,"noisy_err":0.1177},{"g":0.75,"topo":"edge_deficient","E_exact":-4.005816,"E_vqe":-4.004892,"cx":22,"depth":49,"swaps":6,"logical_2q":6,"E_noisy":-3.5486,"noisy_sigma":0.0106,"noisy_err":0.4572},{"g":1.0,"topo":"chain_compatible","E_exact":-4.75877,"E_vqe":-4.758081,"cx":6,"depth":13,"swaps":0,"logical_2q":6,"E_noisy":-4.6069,"noisy_sigma":0.0206,"noisy_err":0.1518},{"g":1.0,"topo":"edge_deficient","E_exact":-4.75877,"E_vqe":-4.758081,"cx":22,"depth":48,"swaps":6,"logical_2q":6,"E_noisy":-4.2068,"noisy_sigma":0.0134,"noisy_err":0.552},{"g":1.25,"topo":"chain_compatible","E_exact":-5.605986,"E_vqe":-5.605622,"cx":6,"depth":13,"swaps":0,"logical_2q":6,"E_noisy":-5.4168,"noisy_sigma":0.0066,"noisy_err":0.1892},{"g":1.25,"topo":"edge_deficient","E_exact":-5.605986,"E_vqe":-5.605622,"cx":22,"depth":48,"swaps":6,"logical_2q":6,"E_noisy":-4.9342,"noisy_sigma":0.018,"noisy_err":0.6718},{"g":1.5,"topo":"chain_compatible","E_exact":-6.503892,"E_vqe":-6.503724,"cx":6,"depth":13,"swaps":0,"logical_2q":6,"E_noisy":-6.2815,"noisy_sigma":0.0165,"noisy_err":0.2224},{"g":1.5,"topo":"edge_deficient","E_exact":-6.503892,"E_vqe":-6.503724,"cx":22,"depth":49,"swaps":6,"logical_2q":6,"E_noisy":-5.6918,"noisy_sigma":0.0186,"noisy_err":0.8121}]};
+
+// ===== Experiment Explorer logic =====
+let expMode='main', expSel='A', expG=1.0;
+function expOptions(){
+  if(expMode==='main') return {sels:['A','B','C'], gs:[0.5,1.0,1.5], label:'Processor'};
+  return {sels:['chain_compatible','edge_deficient'], gs:[0.5,0.75,1.0,1.25,1.5], label:'Topology'};
+}
+function expRenderControls(){
+  const o=expOptions();
+  document.getElementById('expSelLabel').textContent=o.label;
+  document.getElementById('expSel').innerHTML=o.sels.map(s=>
+    '<button class="tab'+(s===expSel?' active':'')+'" data-s="'+s+'">'+s.replace(/_/g,' ')+'</button>').join('');
+  document.getElementById('expG').innerHTML=o.gs.map(g=>
+    '<button class="tab'+(g===expG?' active':'')+'" data-g="'+g+'">'+g+'</button>').join('');
+  document.querySelectorAll('#expSel .tab').forEach(b=>b.onclick=()=>{expSel=b.dataset.s;expRenderControls();expShow();});
+  document.querySelectorAll('#expG .tab').forEach(b=>b.onclick=()=>{expG=parseFloat(b.dataset.g);expRenderControls();expShow();});
+}
+function expShow(){
+  const rows=EXP_DATA[expMode];
+  const key=expMode==='main'?'proc':'topo';
+  const r=rows.find(x=>x[key]===expSel&&x.g===expG);
+  const el=document.getElementById('expCards');
+  if(!r){el.innerHTML='<p>No data for this combination.</p>';return;}
+  function card(v,k,sub,cls){return '<div class="exp-card"><div class="v '+(cls||'')+'">'+v+'</div><div class="k">'+k+'</div>'+(sub?'<div class="sub">'+sub+'</div>':'')+'</div>';}
+  let h='';
+  h+=card(r.E_exact.toFixed(6),'E exact (Ha)','exact diagonalization');
+  h+=card(r.E_vqe.toFixed(6),'E VQE ideal (Ha)','err '+r.ideal_err.toExponential(2)+' Ha');
+  h+=card(r.fidelity.toFixed(4),'fidelity','vs exact ground state');
+  if(r.E_noisy!==null){
+    h+=card(r.E_noisy.toFixed(4),'E noisy (Ha)','±'+r.noisy_sigma.toFixed(4)+' (3 seeds)', r.noisy_err>0.3?'bad':'good');
+    h+=card(r.noisy_err.toFixed(4),'|E_noisy − E_exact|','shot-based, 8192 shots', r.noisy_err>0.3?'bad':'good');
+  } else {
+    h+=card('n/a','E noisy','not run at this g');
+    h+=card('n/a','|E_noisy − E_exact|','not run at this g');
+  }
+  h+=card(r.cx,'routed CX','of '+r.logical_2q+' logical 2Q', r.cx>r.logical_2q?'bad':'good');
+  h+=card(r.depth,'circuit depth','seed_transpiler=42');
+  h+=card(r.swaps,'measured SWAPs','explicit ops in routed circuit', r.swaps>0?'bad':'good');
+  el.innerHTML=h;
+}
+document.querySelectorAll('#expMode .tab').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#expMode .tab').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); expMode=b.dataset.m;
+  const o=expOptions(); expSel=o.sels[0]; expG=o.gs.indexOf(1.0)>=0?1.0:o.gs[0];
+  expRenderControls(); expShow();
+});
+expRenderControls(); expShow();
 </script>
 </body>
 </html>

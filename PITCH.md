@@ -36,7 +36,7 @@ We then examined how this cost difference relates to noisy energy-estimation acc
 across multiple transverse-field values (g ∈ {0.5, 0.75, 1.0, 1.25, 1.5}).
 
 At every tested value of g, the edge-deficient topology's noisy VQE results showed
-**0.22–0.26 Ha higher energy error** than the chain-compatible topology's. The routing
+**0.33–0.59 Ha higher energy error** than the chain-compatible topology's. The routing
 overhead and the accuracy penalty co-occur in this configuration.
 
 ## Our contribution
@@ -60,7 +60,7 @@ principle: the algorithm and the hardware must be engineered together.
 
 **Q: How do you know the difference isn't just statistical noise?**
 A: We ran 3 seeds per topology per g value. The error bars (σ ≈ 0.01–0.03 Ha) are much
-smaller than the 0.22–0.26 Ha gap between topologies. The effect is consistent across all
+smaller than the 0.33–0.59 Ha gap between topologies. The effect is consistent across all
 five g values tested.
 
 **Q: Is Processor C actually better, or just smaller?**
@@ -71,7 +71,7 @@ fewer qubits for this specific workload.
 
 **Q: Why only 3 seeds? Isn't that weak statistics?**
 A: 3 seeds is preliminary evidence. We report mean and standard deviation, and the effect
-size (0.22–0.26 Ha) is large relative to the variability. For publication, we'd increase to
+size (0.33–0.59 Ha) is large relative to the variability. For publication, we'd increase to
 10+ seeds and report confidence intervals.
 
 **Q: Does this prove that more gates always cause more error?**
@@ -106,7 +106,7 @@ constraints and calibration differences matter more.
 - Callout: "3.7× more two-qubit gates from one missing edge"
 
 **Right panel:** Noisy energy error vs exact
-- Plot showing edge-deficient consistently higher by 0.22-0.26 Ha across g sweep
+- Plot showing edge-deficient consistently higher by 0.33-0.59 Ha across g sweep
 - Callout: "Higher routing cost → higher noisy error (measured, not assumed)"
 
 **Bottom:** "Reproducible: python src/ablation.py regenerates all results in 24 s"

@@ -65,10 +65,15 @@ separately.
 - **Reproducible:** `seed_transpiler=42` fixed; identical compilation settings for A/B/C.
 - **Measured, not inferred:** logical 2Q, routed CX, depth, and SWAP are each reported
   independently — SWAP count is read from the routed circuit, never back-computed.
-- **Fair noise comparison:** same noise model and shot budget for all three; 3 seeds give
-  reported variability (σ).
+- **Fair noise comparison:** same noise model (0.5% CX / 0.1% 1Q depolarizing, read from
+  `processors/*.json`) and same 8192-shot budget for all topologies. **3 seeds (1, 2, 3)
+  give a preliminary variability estimate (σ), not strong statistical proof** — error bars
+  in plots are ±1σ.
 - **Correctness checked:** exact ground state (`-4.7588` Ha) verified against an independent
   term-by-term Hamiltonian construction.
+- **Official vs ours:** Processors A/B are the official challenge benchmarks; the
+  chain-compatible/edge-deficient ablation is our custom experiment; Processor C is our
+  simulated proposed architecture (clearly labelled throughout).
 
 ## Repository layout
 ```
